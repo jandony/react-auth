@@ -12,7 +12,10 @@ export default function Chat(user: { userName: any; userImage: any }) {
     const [isLoading, setIsLoading] = useState(false);
     const [value, setValue] = useState("");
     const [likes, setLikes] = useState([]);
+    const [notifications, setNotifications] = useState([]);
+    const [notificationModal, setNotificationModal] = useState(false);
     let [msgIndex, setMsgIndex] = useState(0);
+    const [notificationCounter, setNotificationCounter] = useState(0);
     const [messages, setMessages] = useState<Message[]>([]);
     interface Message {
         userId: string;
@@ -73,14 +76,29 @@ export default function Chat(user: { userName: any; userImage: any }) {
         // STEP 2: RETRIEVE DATA FROM SERVER + UPDATE setLikes
         socket.on("likedMessages", (data) => {
             // Check if liked message is already in the 'likes' array
-            const existingLikes = likes.find(item => item.msgIndex === data.msgIndex);
+            const existingLikes = likes.find((item) => item.msgIndex === data.msgIndex);
             if (!existingLikes) {
                 setLikes([...likes, data]);
             } else {
-                const newLikes = likes.filter(item => item.msgIndex !== data.msgIndex);
+                const newLikes = likes.filter((item) => item.msgIndex !== data.msgIndex);
                 setLikes(newLikes);
             }
-            console.log(data);
+            // console.log(data);
+        });
+
+        socket.on("sendNotification", (data) => {
+            // Check if notification is already in the 'notifications' array
+            const existingNotification = notifications.find((item) => item.likedMessage.msgIndex === data.likedMessage.msgIndex);
+
+            if (!existingNotification) {
+                setNotifications([...notifications, data]);
+                setNotificationCounter(notificationCounter + 1);
+            } else {
+                const newNotifications = notifications.filter((item) => item.likedMessage.msgIndex !== data.likedMessage.msgIndex);
+                setNotifications(newNotifications);
+                setNotificationCounter(notificationCounter > 0 ? notificationCounter - 1 : 0);
+            }
+            // console.log(data);
         });
 
         // Scroll to the bottom of the message container
@@ -115,9 +133,33 @@ export default function Chat(user: { userName: any; userImage: any }) {
 
     const likeMessage = (index: number) => {
         const likedMessage = messages[index];
+        const likedUserId = likedMessage.userId;
+        const likedUserName = likedMessage.userName;
+        const notificationData = {
+            sendingUserName: userName,
+            sendingUserId: userId,
+            sendingUserImage: userImage,
+            receivingUserName: likedUserName,
+            receivingUserId: likedUserId,
+            likedMessage: likedMessage
+        };
+
+        console.log("Current Username: " + userName);
+        console.log("likedUserId: " + likedUserId);
+        console.log("likedUserName: " + likedUserName);
+
         // STEP 1: SEND DATA TO SERVER
-        socket.emit("likedMessage", likedMessage);
+        socket.emit("likedMessage", notificationData);
     };
+
+    const toggleBellIcon = () => {
+        if(notificationModal) {
+            setNotificationModal(false);
+        } else {
+            setNotificationModal(true);
+            setNotificationCounter(0);
+        }
+    }
 
     return (
         <div>
@@ -139,21 +181,36 @@ export default function Chat(user: { userName: any; userImage: any }) {
 
                 <div className="flex flex-col text-white bg-gray-700 rounded border md:w-2/3">
                     {/* Message Header */}
-                    <div className="flex justify-between items-center rounded border-b-2 border-solid border-gray-500 bg-gray-800 px-8 py-2 shadow-lg">
+                    <div className="flex justify-between items-center relative rounded border-b-2 border-solid border-gray-500 bg-gray-800 px-8 py-2 shadow-lg">
                         <p>Chat App</p>
                         <div className="flex w-1/5 justify-between">
-                            <button className="relative p-1">
+                            <button id="bell-icon" className="relative p-1" onClick={toggleBellIcon}>
                                 <BellIcon width={25} />
-                                <span className="flex items-center justify-center absolute top-0 right-0 text-white bg-red-500 text-xs rounded-full h-4 w-4">2</span>
+                                <span className={clsx("block flex items-center justify-center absolute top-0 right-0 text-white bg-red-500 text-xs rounded-full h-4 w-4", {"hidden" : notificationCounter <= 0})}>
+                                    {notificationCounter}
+                                </span>
                             </button>
-                            <button className="relative p-1">
+                            <button id="message-icon" className="relative p-1">
                                 <EnvelopeIcon width={25} />
-                                <span className="flex items-center justify-center absolute top-0 right-0 text-white bg-red-500 text-xs rounded-full h-4 w-4">2</span>
+                                <span className="hidden flex items-center justify-center absolute top-0 right-0 text-white bg-red-500 text-xs rounded-full h-4 w-4">2</span>
                             </button>
-                            <button className="relative p-1">
+                            <button id="" className="relative p-1">
                                 <CogIcon width={25} />
-                                <span className="flex items-center justify-center absolute top-0 right-0 text-white bg-red-500 text-xs rounded-full h-4 w-4">2</span>
+                                <span className="hidden flex items-center justify-center absolute top-0 right-0 text-white bg-red-500 text-xs rounded-full h-4 w-4">2</span>
                             </button>
+                        </div>
+
+                        {/* Notications Popup */}
+                        <div className={clsx("block absolute right-0 top-full w-1/2 p-4 bg-gray-600 text-white text-sm shadow-md z-10", {"hidden" : !notificationModal})}>
+                            {notifications.map((notification) => (
+                                <div key={notification.likedMessage.msgIndex} className="flex items-center mb-2">
+                                    <img src={notification.sendingUserImage} width={25} height={25} alt="Author" className="rounded-full mr-2" />
+                                    <p className="text-gray-300 italic">{notification.sendingUserName} liked your message!</p>
+                                </div>
+                            ))}
+                            
+                           
+                            <button className="bg-teal-500 hover:bg-teal-600 w-full p-2 my-2 rounded">Mark as Read</button>
                         </div>
                     </div>
 
@@ -184,10 +241,10 @@ export default function Chat(user: { userName: any; userImage: any }) {
                                 >
                                     {message.message}
                                     <button
-                                        className={clsx("absolute text-gray-900 stroke-gray-300 hover:stroke-red-600 hover:text-red-600", {
+                                        className={clsx("absolute text-gray-900 stroke-gray-300 hover:stroke-red-600 hover:text-red-600 hover:scale-125 transition-all duration-100", {
                                             "-top-1 -right-2": message.userId !== userId,
                                             "-top-1 -left-2": message.userId === userId,
-                                            "text-red-600": likes.some(item => item.msgIndex === message.msgIndex),
+                                            "scale-125 text-red-600 stroke-red-600 hover:stroke-gray-300": likes.some((item) => item.msgIndex === message.msgIndex),
                                         })}
                                         onClick={() => likeMessage(message.msgIndex)}
                                     >

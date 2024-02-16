@@ -70,8 +70,9 @@ io.on("connection", (socket) => {
     });
 
     socket.on("likedMessage", (data) => {
-        io.emit("likedMessages", data);
-        console.log(data);
+        io.emit("likedMessages", data.likedMessage);
+        io.to(data.receivingUserId).emit("sendNotification", data);
+        // console.log(data);
     });
 
     // Send onlineUsers to CLIENT
@@ -79,7 +80,7 @@ io.on("connection", (socket) => {
 
     // Handle events, e.g., chat messages
     socket.on("message", (msgData) => {
-        console.log(`Received Message from User ${userId}:`, msgData.message);
+        // console.log(`Received Message from User ${userId}:`, msgData.message);
         // Access the userName & userImage from the messageData object
         let userName = msgData.userName;
         let userImage = msgData.userImage;
